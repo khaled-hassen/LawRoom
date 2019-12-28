@@ -6,3 +6,4 @@
 SpawnRoom : R
 LockOn : F
 InjectionShot : RMB
+Switch target mouse wheel
