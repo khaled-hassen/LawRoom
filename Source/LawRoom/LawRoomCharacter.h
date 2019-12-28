@@ -29,7 +29,21 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Ability", meta = (AllowPrivateAccess = "true"))
 	class URoomAbilityComponent* RoomAbilityComponent;
 
+	/// sound effects
+	UPROPERTY(EditDefaultsOnly, Category = "SoundEffects")
+	class USoundWave* OmaeWaMouShindeiruSound;
+
+	UPROPERTY(EditDefaultsOnly, Category = "SoundEffects")
+	class USoundWave* NaniSound;
+
+	UPROPERTY(EditDefaultsOnly, Category = "SoundEffects")
+	class USoundWave* AimingSound;
+
+	UPROPERTY(EditDefaultsOnly, Category = "SoundEffects")
+	class USoundWave* ShotSound;
+
 protected:
+	virtual void BeginPlay() override;
 
 	/** Called for forwards/backward input */
 	void MoveForward(float Value);

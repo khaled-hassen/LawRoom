@@ -8,7 +8,6 @@
 #include "GameFramework/PlayerController.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
-#include "Camera/CameraComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -39,12 +38,6 @@ void URoomAbilityComponent::BeginPlay()
 	Super::BeginPlay();
 
 	Player = Cast<ALawRoomCharacter>(GetOwner());
-
-	// ensures that these sounds has been set in RoomAbilityComponent
-	ensure(NaniSound);
-	ensure(OmaeWaMouShindeiruSound);
-	ensure(AimingSound);
-	ensure(ShotSound);
 
 	// room setup
 	if (ensure(RoomMesh) && ensure(RoomMaterial))
@@ -224,16 +217,28 @@ void URoomAbilityComponent::OnRoomDetectedEnemy(UPrimitiveComponent* OverlappedC
 
 class AEnemy* URoomAbilityComponent::GetClosestEnemy() const
 {
-	if (Enemies.Num() != 0)
+	if (Enemies.Num() != 0) 
 	{
-		AEnemy* ClosestEnemy = Enemies[0];
-		float MinAngle = CalculateAngle(ClosestEnemy);
+		AEnemy* ClosestEnemy = nullptr;
 		for (AEnemy* const Enemy : Enemies)
 		{
-			if (CalculateAngle(Enemy) < MinAngle)
+			if (Enemy->WasRecentlyRendered(0.1))
 			{
-				MinAngle = CalculateAngle(Enemy);
-				ClosestEnemy = Enemy;
+				ClosestEnemy = Enemy; 
+				break;
+			}
+		}
+
+		float MinDistance = CalculateDistance(ClosestEnemy);
+		for (AEnemy* const Enemy : Enemies)
+		{
+			if (Enemy->WasRecentlyRendered(0.1))
+			{
+				if (CalculateDistance(Enemy) < MinDistance)
+				{
+					MinDistance = CalculateDistance(Enemy);
+					ClosestEnemy = Enemy;
+				}
 			}
 		}
 
@@ -243,43 +248,26 @@ class AEnemy* URoomAbilityComponent::GetClosestEnemy() const
 	return nullptr;
 }
 
-float URoomAbilityComponent::CalculateDistance(AEnemy* Enemy, AActor* Target) const
+float URoomAbilityComponent::CalculateDistance(class AEnemy* Enemy) const
 {
-	return (Target) ? (Target->GetActorLocation() - Enemy->GetActorLocation()).Size() : 0.f;
+	return (Enemy && Player) ? (Player->GetActorLocation() - Enemy->GetActorLocation()).Size() : 0.f;
 }
 
-float URoomAbilityComponent::CalculateAngle(class AEnemy* Enemy) const
+void URoomAbilityComponent::LockOnTarget()
 {
 	if (Player)
 	{
-		FVector ControllerForwardVector = FVector(Player->GetControlRotation().Vector().X, Player->GetControlRotation().Vector().Y, 0.f).GetSafeNormal();
-		FVector EnemyDirection = FVector((Player->GetActorLocation() - Enemy->GetActorLocation()).X,
-			(Player->GetActorLocation() - Enemy->GetActorLocation()).Y, 0.f).GetSafeNormal();
-
-		float Angle = FMath::Acos(FVector::DotProduct(-ControllerForwardVector, EnemyDirection));
-
-		return Angle;
-	}
-
-	return 0.f;
-}
-
-void URoomAbilityComponent::FocusOnTarget()
-{
-	if (Player)
-	{
-		FocusEnemy = GetClosestEnemy();
-		if ((Enemies.Num() != 0) && FocusEnemy && CheckPlayerInsideRoom(Player))
+		LockedOnEnemy = GetClosestEnemy();
+		if ((Enemies.Num() != 0) && LockedOnEnemy && CheckPlayerInsideRoom(Player))
 		{
 			if (bIsFocused)
 			{
 				Player->bUseControllerRotationYaw = false;
-				FocusEnemy = nullptr;
+				LockedOnEnemy = nullptr;
 				bIsFocused = false;
 			}
 			else
 			{
-				Sort(Enemies, 0, Enemies.Num() - 1);
 				Player->bUseControllerRotationYaw = true;
 				LookAtEnemy();
 				bIsFocused = true;
@@ -287,7 +275,7 @@ void URoomAbilityComponent::FocusOnTarget()
 		}
 		else
 		{
-			FocusEnemy = nullptr;
+			LockedOnEnemy = nullptr;
 			Player->bUseControllerRotationYaw = false;
 			bIsFocused = false;
 		}
@@ -296,14 +284,14 @@ void URoomAbilityComponent::FocusOnTarget()
 
 void URoomAbilityComponent::LookAtEnemy()
 {
-	if (Player && FocusEnemy)
+	if (Player && LockedOnEnemy)
 	{
 		if (CheckPlayerInsideRoom(Player))
 		{
 			APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
 			if (PlayerController)
 			{
-				FRotator LookAtRotation = UKismetMathLibrary::FindLookAtRotation(Player->GetActorLocation(), FocusEnemy->GetActorLocation());
+				FRotator LookAtRotation = UKismetMathLibrary::FindLookAtRotation(Player->GetActorLocation(), LockedOnEnemy->GetActorLocation());
 				FRotator NewRotation = FRotator(LookAtRotation.Pitch - 30.f, LookAtRotation.Yaw, LookAtRotation.Roll);
 				PlayerController->SetControlRotation(NewRotation);
 			}
@@ -330,65 +318,24 @@ bool URoomAbilityComponent::CheckPlayerInsideRoom(ALawRoomCharacter* Player) con
 	return false;
 }
 
-void URoomAbilityComponent::Sort(TArray<AEnemy*>& Enemies, int32 Start, int32 End)
-{
-	if (Start < End)
-	{
-		int32 Pi = Partition(Enemies, Start, End);
-
-		// Separately sort elements before 
-		// partition and after partition 
-		Sort(Enemies, Start, Pi - 1);
-		Sort(Enemies, Pi + 1, End);
-	}
-}
-
-int32 URoomAbilityComponent::Partition(TArray<AEnemy*>& Enemies, int32 Start, int32 End)
-{
-	AEnemy* Pivot = Enemies[End];    // pivot 
-	int32 i = (Start - 1);  // Index of smaller element 
-
-	for (int32 j = Start; j <= End - 1; j++)
-	{
-		// If current element is smaller than or 
-		// equal to pivot 
-		if (CalculateDistance(GetClosestEnemy(), Enemies[j]) <= CalculateDistance(GetClosestEnemy(), Pivot))
-		{
-			i++; // increment index of smaller element 
-			Swap(Enemies[i], Enemies[j]);
-		}
-	}
-	Swap(Enemies[i + 1], Enemies[End]);
-
-	return (i + 1);
-}
-
-void URoomAbilityComponent::Swap(AEnemy*& Enemy1, AEnemy*& Enemy2)
-{
-	AEnemy* Temp = Enemy1;
-	Enemy1 = Enemy2;
-	Enemy2 = Temp;
-}
-
-
 void URoomAbilityComponent::ChangeTarget(float Value)
 {
-	if (bIsFocused && (Enemies.Num() != 0) && FocusEnemy && (Value != 0))
+	if (bIsFocused && (Enemies.Num() != 0) && LockedOnEnemy && (Value != 0))
 	{
-		int32 Index = Enemies.Find(FocusEnemy);
+		int32 Index = Enemies.Find(LockedOnEnemy);
 		if (Index != INDEX_NONE)
 		{
 			Index = (Index + (int32)Value) % Enemies.Num();
 			Index = (Index < 0) ? Enemies.Num() + Index : Index;
 
-			FocusEnemy = Enemies[Index];
+			LockedOnEnemy = Enemies[Index];
 		}
 	}
 }
 
 void URoomAbilityComponent::RequestInjectionShot()
 {
-	if (FocusEnemy && bIsFocused && Player && !bIsInjectionShot && CheckPlayerInsideRoom(Player))
+	if (LockedOnEnemy && bIsFocused && Player && !bIsInjectionShot && CheckPlayerInsideRoom(Player))
 	{
 		// prevent the room from being destroyed when performing injection shot (pause it's life progression)
 		UpdateColorTimeline->Stop();
@@ -406,19 +353,19 @@ void URoomAbilityComponent::RequestInjectionShot()
 
 void URoomAbilityComponent::InjectionShot()
 {
-	if (FocusEnemy && bIsFocused && ensure(InjectionShotAnim) && Player && CheckPlayerInsideRoom(Player))
+	if (LockedOnEnemy && bIsFocused && ensure(InjectionShotAnim) && Player && CheckPlayerInsideRoom(Player))
 	{
 		bIsInjectionShot = true;
 		Player->PlayAnimMontage(InjectionShotAnim);
 
-		FVector LaunchDirection = UKismetMathLibrary::GetDirectionUnitVector(Player->GetActorLocation(), FocusEnemy->GetActorLocation());
-		float LaunchForce = (Player->GetActorLocation() - FocusEnemy->GetActorLocation()).Size() * 20.f;
+		FVector LaunchDirection = UKismetMathLibrary::GetDirectionUnitVector(Player->GetActorLocation(), LockedOnEnemy->GetActorLocation());
+		float LaunchForce = (Player->GetActorLocation() - LockedOnEnemy->GetActorLocation()).Size() * 20.f;
 		FVector LaunchVelocity = LaunchDirection * LaunchForce;
 
 		Player->LaunchCharacter(LaunchVelocity, true, true);
 
 		bIsFocused = false;
-		FocusEnemy = nullptr;
+		LockedOnEnemy = nullptr;
 		Player->bUseControllerRotationYaw = false;
 	}
 }

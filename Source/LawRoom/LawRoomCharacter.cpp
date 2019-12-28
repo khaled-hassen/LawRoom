@@ -1,7 +1,6 @@
 // Copyright 1998-2019 Epic Games, Inc. All Rights Reserved.
 
 #include "LawRoomCharacter.h"
-#include "HeadMountedDisplayFunctionLibrary.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/InputComponent.h"
@@ -12,9 +11,6 @@
 #include "TimerManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundWave.h"
-
-//////////////////////////////////////////////////////////////////////////
-// ALawRoomCharacter
 
 ALawRoomCharacter::ALawRoomCharacter()
 {
@@ -49,7 +45,6 @@ ALawRoomCharacter::ALawRoomCharacter()
 	FollowCamera->bUsePawnControlRotation = false; // Camera does not rotate relative to arm
 	
 	RoomAbilityComponent = CreateDefaultSubobject<URoomAbilityComponent>("RoomAbilityComponent");
-
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -68,7 +63,7 @@ void ALawRoomCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerI
 
 	// Room abilities bindings
 	PlayerInputComponent->BindAction("SpawnRoom", IE_Pressed, RoomAbilityComponent, &URoomAbilityComponent::CreateRoom);
-	PlayerInputComponent->BindAction("Focus", IE_Pressed, RoomAbilityComponent, &URoomAbilityComponent::FocusOnTarget);
+	PlayerInputComponent->BindAction("LockOn", IE_Pressed, RoomAbilityComponent, &URoomAbilityComponent::LockOnTarget);
 	PlayerInputComponent->BindAxis("ChangeTarget", RoomAbilityComponent, &URoomAbilityComponent::ChangeTarget);
 	PlayerInputComponent->BindAction("InjectionShot", IE_Pressed, RoomAbilityComponent, &URoomAbilityComponent::RequestInjectionShot);
 }
@@ -95,6 +90,17 @@ void ALawRoomCharacter::LookUpAt(float Rate)
 	{
 		RoomAbilityComponent->LookAtEnemy();
 	}
+}
+
+void ALawRoomCharacter::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// ensures that these sounds has been set in LawRoomCharacter blueprint class defaults
+	ensure(NaniSound);
+	ensure(OmaeWaMouShindeiruSound);
+	ensure(AimingSound);
+	ensure(ShotSound);
 }
 
 void ALawRoomCharacter::MoveForward(float Value)
@@ -128,24 +134,24 @@ void ALawRoomCharacter::MoveRight(float Value)
 
 void ALawRoomCharacter::ChangeCameraAndAttack()
 {
-	if (RoomAbilityComponent->GetFocusEnemy())
+	if (RoomAbilityComponent->GetLockedOnEnemy())
 	{
-		RoomAbilityComponent->GetFocusEnemy()->LookAt(this);
+		RoomAbilityComponent->GetLockedOnEnemy()->LookAt(this);
 
 		FTimerDelegate CameraTimer;
 		CameraTimer.BindLambda([&]()
 		{
 			if (ChangeToNaniCamera()) //  if the camera changed to nani camera (there is a FocusEnemy) the change to InjectionCamera
 			{
-				float Duration = RoomAbilityComponent->GetNaniSound()->GetDuration();
+				float Duration = NaniSound->GetDuration();
 
 				FTimerDelegate AimingTimer;
 				AimingTimer.BindLambda([&]()
 				{
-					float Duration = RoomAbilityComponent->GetAimingSound()->GetDuration();
+					float Duration = AimingSound->GetDuration();
 
-					UGameplayStatics::PlaySound2D(GetWorld(), RoomAbilityComponent->GetAimingSound());
-					RoomAbilityComponent->GetFocusEnemy()->MoveCrosshair(Duration);
+					UGameplayStatics::PlaySound2D(GetWorld(), AimingSound);
+					RoomAbilityComponent->GetLockedOnEnemy()->MoveCrosshair(Duration);
 
 					FTimerHandle TimerHandle;
 					// changes back to follow camera
@@ -157,11 +163,11 @@ void ALawRoomCharacter::ChangeCameraAndAttack()
 			}
 		});
 
-		float Duration = RoomAbilityComponent->GetOmaeSound()->GetDuration();
+		float Duration = OmaeWaMouShindeiruSound->GetDuration();
 		FTimerHandle TimerHandle;
 		GetWorld()->GetTimerManager().SetTimer(TimerHandle, CameraTimer, Duration, false);
 
-		UGameplayStatics::PlaySound2D(GetWorld(), RoomAbilityComponent->GetOmaeSound());
+		UGameplayStatics::PlaySound2D(GetWorld(), OmaeWaMouShindeiruSound);
 	}
 }
 
@@ -169,12 +175,12 @@ bool ALawRoomCharacter::ChangeToNaniCamera()
 {
 	if (RoomAbilityComponent)
 	{
-		if (RoomAbilityComponent->GetFocusEnemy())
+		if (RoomAbilityComponent->GetLockedOnEnemy())
 		{
 			APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
-			PlayerController->SetViewTargetWithBlend(RoomAbilityComponent->GetFocusEnemy(), 0.2f, EViewTargetBlendFunction::VTBlend_Cubic);
+			PlayerController->SetViewTargetWithBlend(RoomAbilityComponent->GetLockedOnEnemy(), 0.2f, EViewTargetBlendFunction::VTBlend_Cubic);
 
-			UGameplayStatics::PlaySound2D(GetWorld(), RoomAbilityComponent->GetNaniSound());
+			UGameplayStatics::PlaySound2D(GetWorld(), NaniSound);
 
 			return true;
 		}
@@ -194,7 +200,7 @@ void ALawRoomCharacter::ChangeToFollowCamera()
 	FTimerDelegate ShootingTimer;
 	ShootingTimer.BindLambda([&]()
 	{
-			UGameplayStatics::PlaySound2D(GetWorld(), RoomAbilityComponent->GetShotSound());
+			UGameplayStatics::PlaySound2D(GetWorld(), ShotSound);
 			GetCharacterMovement()->SetMovementMode(MOVE_Walking);
 			RoomAbilityComponent->InjectionShot();
 	});

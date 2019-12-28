@@ -69,38 +69,20 @@ private:
 	bool bIsFocused = false;
 
 	// the targeted enemy
-	class AEnemy* FocusEnemy = nullptr;
+	class AEnemy* LockedOnEnemy = nullptr;
 
 	// player character: owner
 	class ALawRoomCharacter* Player = nullptr;
-
-	/// sound effects
-	UPROPERTY(EditDefaultsOnly, Category = "Setup")
-	class USoundWave* OmaeWaMouShindeiruSound;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Setup")
-	class USoundWave* NaniSound;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Setup")
-	class USoundWave* AimingSound;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Setup")
-	class USoundWave* ShotSound;
-	///
+	
 private:
-	// calculate the distance between the enemy and the FocusedActor or the player. Default is the player when target == nullptr
-	float CalculateDistance(class AEnemy* Enemy, AActor* Target = nullptr) const;
-
-	// calculate the angle between the enemy and the player.
-	float CalculateAngle(class AEnemy* Enemy) const;
+	// calculate the distance between the player and the LockedOnEnemy
+	float CalculateDistance(class AEnemy* Enemy) const;
 
 	// checks if the player is in the room to enable him to use his abilities
 	bool CheckPlayerInsideRoom(class ALawRoomCharacter* Player) const;
 
-	// used with the sort method
-	int32 Partition(TArray<class AEnemy*>& Enemies, int32 Start, int32 End);
-	// used with the Partition method : swap two enemies array elements
-	void Swap(AEnemy*& Enemy1, AEnemy*& Enemy2);
+	// Get the closest visible enemy to the player
+	class AEnemy* GetClosestEnemy() const;
 
 protected:
 	// Called when the game starts
@@ -128,9 +110,7 @@ public:
 	UFUNCTION()
 	void ChangeColor();
 
-	/** wait for the room to complete spawning the update color every frame
-	 * @param SpawnTime: the time when the room starts spawning
-	 * @param SpawnDuration: the duration that takes to spawn the room*/
+	// wait for the room to complete spawning then update color every frame
 	UFUNCTION()
 	void UpdateRoomColor(float Alpha);
 
@@ -146,30 +126,15 @@ public:
 	UFUNCTION()
 	void OnKatanaCollidedWithEnemy(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
 
-	UFUNCTION(BlueprintCallable)
-	// Get the closest enemy to the player (using angles not distance)
-	class AEnemy* GetClosestEnemy() const;
-
-	FORCEINLINE class AEnemy* GetFocusEnemy() const { return FocusEnemy; }
+	FORCEINLINE class AEnemy* GetLockedOnEnemy() const { return LockedOnEnemy; }
 	FORCEINLINE bool GetIsFocused() const { return bIsFocused; }
 
 	// focus only when the player is in the room
-	void FocusOnTarget();
+	void LockOnTarget();
 	// LookAtEnemy only when the player is in the room
 	void LookAtEnemy();
 
-	/** sort Enemies array by distance(between TheClosestEnemy and the Enemies elements) ascending
-	 * using quickSort for info link : https://en.wikipedia.org/wiki/Quicksort and https://www.geeksforgeeks.org/cpp-program-for-quicksort/*/
-	void Sort(TArray<class AEnemy*>& Enemies, int32 Start, int32 End);
-
-	/** change the targeted enemy changes the FocusEnemy to the closest enemy (to FocusEnemy)
-	 * so the Enemies array needs to be sorted by distance
-	 * @param Value : 1 means forward / -1 means backward
-	 * for example if the enemies array contains 3 enemies and the index of the target is 1
-	 * then (value = 1) the next target index  is 2
-	 * (value = -1)  the next target index is 0
-	 * if the index is negative :
-	 * index -1 is the same as 2 / index -2 is the same as 1 / index -3 is the same as 0 */
+	// change the Lock on enemy
 	void ChangeTarget(float Value);
 
 	// check if the player can perform injection shot attack  if true calls the StartInjectionShot method from LawRoomCharacter
@@ -191,8 +156,4 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void SetIsInjectionShot(bool Value) { bIsInjectionShot = Value; }
 
-	FORCEINLINE class USoundWave* GetOmaeSound() const { return OmaeWaMouShindeiruSound; }
-	FORCEINLINE class USoundWave* GetNaniSound() const { return NaniSound; }
-	FORCEINLINE class USoundWave* GetAimingSound() const { return AimingSound; }
-	FORCEINLINE class USoundWave* GetShotSound() const { return ShotSound; }
 };
