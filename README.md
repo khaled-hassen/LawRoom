@@ -1,5 +1,5 @@
 # LawRoomAbility
- I created my own Law's injection shot from one piece (sorry for the messy code)
+ I created my own Law's injection shot from one piece
 
 # key bindings
 
